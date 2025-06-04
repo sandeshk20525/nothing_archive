@@ -1,0 +1,53 @@
+name: Nothing Firmware Dumper
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'URLs (comma or space separated)'
+        required: true
+      name:
+        description: 'Release tag'
+        required: true
+
+jobs:
+  dump:
+    permissions: write-all
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Setup environment
+      run: |
+        sudo apt update
+        sudo apt -y install aria2 zstd p7zip-full parallel openssl xxhash jq
+        python3 -m pip install gdown
+
+    - name: Set script permissions
+      run: chmod +x scripts/dump.sh
+
+    - name: Download & Process OTA Packages
+      id: dump
+      run: |
+        IFS=',' read -ra URLS <<< "${{ inputs.urls }}"
+        for url in "${URLS[@]}"; do
+          echo "$url"
+        done | xargs ./scripts/dump.sh
+        
+    - name: Create tag
+      run: |
+        git fetch origin main
+        git tag "${{ inputs.name }}" 44daed30334f5bea826f828145128cdff1efe44c
+        git push origin "${{ inputs.name }}" 
+
+    - name: Upload release assets
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: out/*
+        artifactErrorsFailBuild: true
+        body: ${{ steps.dump.outputs.body }}
+        tag: ${{ steps.dump.outputs.tag }}
+        name: ${{ steps.dump.outputs.tag }}
+        token: ${{ secrets.GITHUB_TOKEN }}
